@@ -1,7 +1,8 @@
 from airflow import DAG
 from airflow.providers.http.sensors.http import HttpSensor
 from airflow.sensors.filesystem import FileSensor
-from airflow.sensors.python import PythonSensor
+from airflow.sensors.python import PythonOperator
+from airflow.operators.bash import BashOperator
 
 from datetime import datetime, timedelta
 import csv
@@ -80,7 +81,16 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         timeout = 20
     )
 
-    download_rates_task = PythonSensor(
+    download_rates_task = PythonOperator(
         task_id="downloading_rates",
         python_callable = download_rates #function to execute
+    )
+
+    saving_rates = BashOperator(
+        task_id = 'saving_rates',
+        bash_command = '''
+            hdfs dfs -mkdir -p /forex && \
+            hdfs dfs -put -f $AIRFLOW_HOME/dags/files/forex_rates.json /forex
+        '''
+        #we create a folder forex, and move the json file into it
     )
