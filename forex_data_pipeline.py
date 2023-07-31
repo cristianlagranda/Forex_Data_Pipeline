@@ -3,6 +3,7 @@ from airflow.providers.http.sensors.http import HttpSensor
 from airflow.sensors.filesystem import FileSensor
 from airflow.sensors.python import PythonOperator
 from airflow.operators.bash import BashOperator
+from airflow.providers.apache.hive.operators.hive import HiveOperator
 
 from datetime import datetime, timedelta
 import csv
@@ -93,4 +94,24 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
             hdfs dfs -put -f $AIRFLOW_HOME/dags/files/forex_rates.json /forex
         '''
         #we create a folder forex, and move the json file into it
+    )
+
+    creating_forex_rates_table = HiveOperator(
+        task_id="creating_forex_rates_table",
+        hive_cli_conn_id="hive_conn",
+        hql="""
+            CREATE EXTERNAL TABLE IF NOT EXISTS forex_rates(
+                base STRING,
+                last_update DATE,
+                eur DOUBLE,
+                usd DOUBLE,
+                nzd DOUBLE,
+                gbp DOUBLE,
+                jpy DOUBLE,
+                cad DOUBLE
+                )
+            ROW FORMAT DELIMITED
+            FIELDS TERMINATED BY ','
+            STORED AS TEXTFILE
+        """
     )
