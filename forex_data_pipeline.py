@@ -1,11 +1,12 @@
 from airflow import DAG
 from airflow.providers.http.sensors.http import HttpSensor
 from airflow.sensors.filesystem import FileSensor
-from airflow.sensors.python import PythonOperator
+from airflow.operators.python_operator import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.providers.apache.hive.operators.hive import HiveOperator
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.operators.email import EmailOperator
+from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
 
 from datetime import datetime, timedelta
 import csv
@@ -62,10 +63,13 @@ def download_rates():
                 json.dump(outdata, outfile)
                 outfile.write('\n')
 
+def _get_message():
+    return 'Hi from forex'
 
 with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
     schedule_interval="@daily", default_args=default_args, catchup=False) as dag:
 
+#1 - Check availability of forex rates
     #checks every 5 seconds (poke_interval) if the URL is available, and if it is returning what we expect
     is_forex_rates_available = HttpSensor(
         task_id='is_forex_rates_available',
@@ -76,6 +80,7 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         timeout = 20
     )
 
+#2 - Check availability of the file having currencies to watch
     is_file_available = FileSensor(
         task_id = 'is_file_available',
         fs_conn_id = 'forex_path', #same id created in Airflow
@@ -84,11 +89,13 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         timeout = 20
     )
 
+#3 - Download forex rates with Python
     download_rates_task = PythonOperator(
         task_id="downloading_rates",
         python_callable = download_rates #function to execute
     )
 
+#4 - Save the forex rates in HDFS
     saving_rates = BashOperator(
         task_id = 'saving_rates',
         bash_command = '''
@@ -98,6 +105,7 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         #we create a folder forex, and move the json file into it
     )
 
+#5 - Create a Hive table to store forex rates from the HDFS
     creating_forex_rates_table = HiveOperator(
         task_id="creating_forex_rates_table",
         hive_cli_conn_id="hive_conn",
@@ -118,6 +126,7 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         """
     )
 
+#6 - Process forex rates with Spark
     forex_processing = SparkSubmitOperator(
         task_id="forex_processing",
         application="/opt/airflow/dags/scripts/forex_proocessing.py",
@@ -125,9 +134,18 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         verbose = False
     )
 
+#7 - Send an email notification
     send_email_notification = EmailOperator(
         task_id = 'send_email_notification',
         to = 'airflow_course@yopmail.com',
         subject = 'forex_data_pipeline',
         html_content = '<h3>forex_data_pipeline</h3>'
+    )
+
+#8 - Send a Slack notification
+    send_slack_notification = SlackWebhookOperator(
+        task_id = 'send_slack_notification',
+        http_conn_id = 'slack_conn',
+        message = _get_message(),
+        channel = '#airflow'
     )
