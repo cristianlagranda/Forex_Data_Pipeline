@@ -129,7 +129,7 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
 #6 - Process forex rates with Spark
     forex_processing = SparkSubmitOperator(
         task_id="forex_processing",
-        application="/opt/airflow/dags/scripts/forex_proocessing.py",
+        application="/opt/airflow/dags/scripts/forex_processing.py",
         conn_id = 'spark_conn',
         verbose = False
     )
@@ -149,3 +149,9 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         message = _get_message(),
         channel = '#airflow'
     )
+
+#set dependencies between tasks
+    is_forex_rates_available >> is_file_available >> download_rates_task >> saving_rates
+    saving_rates >> creating_forex_rates_table >> forex_processing
+    forex_processing >> send_email_notification
+    forex_processing >> send_slack_notification
