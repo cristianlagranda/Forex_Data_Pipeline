@@ -5,6 +5,7 @@ from airflow.sensors.python import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.providers.apache.hive.operators.hive import HiveOperator
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.operators.email import EmailOperator
 
 from datetime import datetime, timedelta
 import csv
@@ -122,4 +123,11 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
         application="/opt/airflow/dags/scripts/forex_proocessing.py",
         conn_id = 'spark_conn',
         verbose = False
-)
+    )
+
+    send_email_notification = EmailOperator(
+        task_id = 'send_email_notification',
+        to = 'airflow_course@yopmail.com',
+        subject = 'forex_data_pipeline',
+        html_content = '<h3>forex_data_pipeline</h3>'
+    )
